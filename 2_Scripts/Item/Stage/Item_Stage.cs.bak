@@ -1,0 +1,204 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using TMPro;
+using UnityEngine;
+using UnityEngine.Rendering;
+
+public enum EItem_Stage_Card_Action
+{
+    None = 0,
+    Move,
+    Fade,
+    Back,
+    Front,
+    Item,
+    Darkness,
+    Fire,
+    BlackOut,
+    BlackIn
+}
+
+public class Item_Stage : ObjMng
+{
+
+    [System.Serializable]
+    public struct SItemUI
+    {
+        public GameObject Active;
+        public SpriteRenderer Icon;
+        public TextMeshPro Name;
+        public TextMeshPro Category;
+    }
+
+    [System.Serializable]
+    public class SStageUI
+    {
+        public GameObject Active;
+        public SpriteRenderer Icon;
+        public SpriteRenderer Frame;
+        public TextMeshPro Name;
+    }
+
+    [SerializeField] Transform m_MovePanel;
+    [SerializeField] SItemUI m_Item;
+    [SerializeField] SStageUI[] m_Stage;
+    [SerializeField] SpriteRenderer m_Dark;
+    [SerializeField] Material m_MatDissolve;
+
+    TextMeshPro[] m_Texts;
+    SpriteRenderer[] m_Sprites;
+    Dictionary<int, Color> m_TextsColor = new Dictionary<int, Color>();
+    Dictionary<int, Color> m_SpritesColor = new Dictionary<int, Color>();
+    int m_ViewCardPos = 0;
+    IEnumerator m_Action = null;
+    public int m_Line, m_Pos;
+
+    public bool IS_SelectCard()
+    {
+        return m_Line == 0 && m_Action == null;
+    }
+
+    private void Awake()
+    {
+
+        for (int i = m_Stage.Length - 1; i > -1; i--)
+        {
+            SStageUI ui = m_Stage[i];
+            Material mat = new Material(m_MatDissolve);
+            ui.Icon.material = ui.Frame.material = mat;
+            mat.SetFloat("_DissolveValue", 0f);
+        }
+
+        m_ViewCardPos = 0;
+        m_Stage[m_ViewCardPos].Active.SetActive(true);
+        m_Stage[1 - m_ViewCardPos].Active.SetActive(false);
+
+        m_Texts = GetComponentsInChildren<TextMeshPro>(true);
+        m_Sprites = GetComponentsInChildren<SpriteRenderer>(true);
+        m_TextsColor.Clear();
+        m_SpritesColor.Clear();
+        m_Dark.color = new Color(0f, 0f, 0f, 0.5f);
+        for (int i = m_Texts.Length - 1; i > -1; i--) m_TextsColor.Add(i, m_Texts[i].color);
+        for (int i = m_Sprites.Length - 1; i > -1; i--) m_SpritesColor.Add(i, m_Sprites[i].color);
+    }
+
+    public void SetData(StageCardInfo info)
+    {
+        StopAllCoroutines();
+        iTween.Stop(gameObject);
+        if(m_Texts != null)
+        {
+            for (int i = m_Texts.Length - 1; i > -1; i--) m_Texts[i].color = m_TextsColor[i];
+            for (int i = m_Sprites.Length - 1; i > -1; i--) m_Sprites[i].color = m_SpritesColor[i];
+        }
+
+        m_Dark.color = new Color(0f, 0f, 0f, 0.5f);
+        m_Dark.gameObject.SetActive(true);
+    }
+
+
+    public void SetPos(int line, int pos)
+    {
+
+        GetComponent<SortingGroup>().sortingOrder = line * -1;
+        m_Line = line;
+        m_Pos = pos;
+    }
+
+
+    public void Action(EItem_Stage_Card_Action act, Action<Item_Stage> EndCB)
+    {
+        Action(act, 0f, 0f, 0f, 0f, EndCB);
+    }
+
+    public void Action(EItem_Stage_Card_Action act, float WaitTime = 0f, float x = 0f, float y = 0f, float z = 0f, Action<Item_Stage> EndCB = null)
+    {
+        switch (act)
+        {
+        case EItem_Stage_Card_Action.None:
+            m_Action = null;
+            break;
+        case EItem_Stage_Card_Action.Move:
+            m_Action = Action_Move(WaitTime);
+            break;
+        case EItem_Stage_Card_Action.Fade:
+            m_Action = Action_Fade(EndCB);
+            break;
+        }
+        if (m_Action != null) StartCoroutine(m_Action);
+    }
+
+    IEnumerator Action_Move(float WaitTime)
+    {
+        float MOVE_TIME = 0.3f;
+        yield return new WaitForSeconds(WaitTime);
+        iTween.MoveTo(gameObject, iTween.Hash("y", m_Line * BaseValue.STAGE_INTERVER.y, "time", BaseValue.STAGE_MOVE_TIME, "easetype", "linear", "islocal", true));
+
+        yield return new WaitForSeconds(MOVE_TIME);
+
+        if (m_Line == 0)
+        {
+            m_Dark.gameObject.SetActive(false);
+            yield return Action_Scale(WaitTime);
+        }
+
+        Action(EItem_Stage_Card_Action.None);
+    }
+
+    IEnumerator Action_Scale(float WaitTime = 0f)
+    {
+        yield return new WaitForSeconds(WaitTime);
+        float CheckTime = 0f;
+        float Scale = 1.15f;
+        Vector3 v3SPos = transform.localPosition;
+        Vector3 v3EPos = new Vector3(v3SPos.x * Scale, v3SPos.y - (BaseValue.STAGE_INTERVER.y * Scale - BaseValue.STAGE_INTERVER.y), 0f);
+        Vector3 v3GPos = v3EPos - v3SPos;
+        Vector3 v3SScale = transform.localScale;
+        Vector3 v3GScale = BaseValue.STAGE_SELECT_LINE_SCALE - v3SScale;
+        while (true)
+        {
+            yield return new WaitForFixedUpdate();
+            CheckTime += Time.fixedDeltaTime / BaseValue.STAGE_MOVE_TIME;
+            if (CheckTime >= 1f)
+            {
+                transform.localScale = v3SScale + v3GScale;
+                transform.localPosition = v3SPos + v3GPos;
+                break;
+            }
+            transform.localScale = v3SScale + v3GScale * CheckTime;
+            transform.localPosition = v3SPos + (v3GPos * CheckTime);
+        }
+        yield return new WaitForFixedUpdate();
+    }
+
+    IEnumerator Action_Fade(Action<Item_Stage> EndCB)
+    {
+        float MaxTime = 0.4f;
+        AnimationCurve Curve = AnimationCurve.EaseInOut(0, 1f, MaxTime, 0f);
+
+        float checktime = 0;
+        while (true)
+        {
+            yield return new WaitForFixedUpdate();
+            checktime += Time.fixedDeltaTime;
+            float alpha = Curve.Evaluate(checktime / MaxTime);
+
+            for (int i = m_Texts.Length - 1; i > -1; i--)
+            {
+                Color color = m_TextsColor[i];
+                m_Texts[i].color = new Color(color.r, color.g, color.b, color.a * alpha);
+            }
+
+            for (int i = m_Sprites.Length - 1; i > -1; i--)
+            {
+                Color color = m_SpritesColor[i];
+                m_Sprites[i].color = new Color(color.r, color.g, color.b, color.a * alpha);
+            }
+
+            if (checktime >= MaxTime) break;
+        }
+        Action(EItem_Stage_Card_Action.None);
+        EndCB?.Invoke(this);
+    }
+}

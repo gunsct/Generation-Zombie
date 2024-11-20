@@ -1,0 +1,26 @@
+﻿public enum SortingType
+{
+	Grade = 0,
+	CombatPower,
+	Level,
+	Men,
+	Hyg,
+	Sat,
+	Name,
+	Point,
+	Time,
+	Job,
+	SortingEnd,
+
+	FILTER_Grade_1 = 100,
+	FILTER_Grade_2,
+	FILTER_Grade_3,
+	FILTER_Grade_4,
+	FILTER_Grade_5,
+	FILTER_Grade_6,
+	FILTER_Grade_7,
+	FILTER_Grade_8,
+	FILTER_Grade_9,
+	FILTER_Grade_10,
+	FilterEnd,
+}
